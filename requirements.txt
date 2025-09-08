@@ -1,0 +1,15 @@
+# requirements.txt
+fastapi
+uvicorn[standard]
+celery
+redis
+pydantic
+pydantic-settings
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+PyMuPDF
+azure-ai-formrecognizer
+requests
+slowapi
+python-dotenv
