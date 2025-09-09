@@ -18,21 +18,23 @@ services:
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
+      - ./logs:/app/logs
     depends_on:
       - redis
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   celery:
     build: .
-    working_dir: /app  # Add working directory
+    working_dir: /app
     environment:
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
+      - ./logs:/app/logs
     depends_on:
       - redis
       - api
-    command: celery -A app.tasks.celery_tasks:celery_app worker --loglevel=info  # Updated command
+    command: celery -A app.tasks.celery_tasks:celery_app worker --loglevel=info
 
   nginx:
     image: nginx:alpine

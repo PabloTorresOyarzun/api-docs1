@@ -16,7 +16,7 @@ class SGDService:
     def get_despacho_documents(self, despacho_id: str) -> List[Dict[str, Any]]:
         """Obtiene documentos de un despacho desde SGD"""
         try:
-            url = f"{self.base_url}/documentos64/despacho/{despacho_id}"
+            url = f"{self.base_url}/{despacho_id}"
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
             
@@ -25,11 +25,17 @@ class SGDService:
             
         except Exception as e:
             print(f"Error obteniendo documentos SGD: {e}")
+            print(f"URL construida: {url}")
+            print(f"Headers: {self.headers}")
             return []
     
     def decode_document(self, base64_content: str) -> bytes:
         """Decodifica documento base64 a PDF"""
         try:
+            # Remover prefijo si existe
+            if base64_content.startswith("data:application/pdf;base64,"):
+                base64_content = base64_content.replace("data:application/pdf;base64,", "")
+            
             return base64.b64decode(base64_content)
         except Exception as e:
             print(f"Error decodificando documento: {e}")

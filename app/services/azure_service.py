@@ -17,7 +17,7 @@ class AzureDocumentService:
         """Clasifica un documento usando el modelo doctype_01"""
         try:
             poller = self.client.begin_classify_document(
-                "doctype_01", 
+                settings.azure_classification_model, 
                 document=pdf_bytes
             )
             result = poller.result()
@@ -45,9 +45,13 @@ class AzureDocumentService:
     def extract_data(self, pdf_bytes: bytes, document_type: DocumentType) -> Dict[str, Any]:
         """Extrae datos del documento según su tipo"""
         try:
-            model_name = "inovice_01" if document_type in [DocumentType.INVOICE, DocumentType.TRANSPORT] else "transport_01"
+            # Seleccionar modelo según tipo de documento
             if document_type == DocumentType.TRANSPORT:
                 model_name = "transport_01"
+            elif document_type in [DocumentType.INVOICE, DocumentType.PACKLIST]:
+                model_name = "inovice_01"  # Manteniendo el nombre con typo como está en specs
+            else:
+                model_name = "inovice_01"  # Default
             
             poller = self.client.begin_analyze_document(
                 model_name,

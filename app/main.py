@@ -10,12 +10,12 @@ from .utils.rate_limiter import limiter, _rate_limit_exceeded_handler
 from .auth import create_access_token
 from datetime import timedelta
 
-# Configurar logging
+# Configurar logging a archivo y consola
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("api.log"),
+        logging.FileHandler("/app/logs/api.log"),
         logging.StreamHandler()
     ]
 )

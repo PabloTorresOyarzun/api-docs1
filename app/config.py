@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # Azure
     azure_endpoint: str = os.getenv("AZURE_ENDPOINT")
     azure_key: str = os.getenv("AZURE_KEY")
+    azure_classification_model: str = os.getenv("AZURE_CLASSIFICATION_MODEL", "doctype_01")
+    azure_invoice_model: str = os.getenv("AZURE_INVOICE_MODEL", "inovice_01")
+    azure_transport_model: str = os.getenv("AZURE_TRANSPORT_MODEL", "transport_01")
     
     # SGD
     sgd_base_url: str = os.getenv("SGD_BASE_URL")
@@ -26,7 +29,9 @@ class Settings(BaseSettings):
     rate_limit_calls: int = int(os.getenv("RATE_LIMIT_CALLS", "100"))
     rate_limit_period: int = int(os.getenv("RATE_LIMIT_PERIOD", "60"))
     
-    class Config:
-        env_file = ".env"
+    model_config = {
+        "env_file": ".env",
+        "extra": "allow"
+    }
 
 settings = Settings()
