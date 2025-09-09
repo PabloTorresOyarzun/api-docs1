@@ -4,6 +4,9 @@ from ..models import DocumentType, ClassificationResult, ExtractionResult, Proce
 from ..utils.pdf_utils import PDFProcessor
 from .azure_service import AzureDocumentService
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     def __init__(self):
@@ -15,25 +18,34 @@ class DocumentProcessor:
         start_time = time.time()
         
         # 1. Separar páginas
+        logger.info(f"Separando páginas del documento {document_id}")
         pages = self.pdf_processor.separate_pages(pdf_bytes)
+        logger.info(f"Documento separado en {len(pages)} páginas")
         
         # 2. Clasificar cada página
+        logger.info("Iniciando clasificación de páginas individuales")
         classifications = []
         for i, page_bytes in enumerate(pages):
+            logger.info(f"Clasificando página {i+1}/{len(pages)}")
             doc_type = self.azure_service.classify_document(page_bytes)
             classifications.append(ClassificationResult(
                 page_number=i + 1,
                 document_type=doc_type,
-                confidence=0.95  # Azure no siempre devuelve confianza
+                confidence=0.95
             ))
+            logger.info(f"Página {i+1} clasificada como: {doc_type}")
         
         # 3. Agrupar páginas consecutivas del mismo tipo
+        logger.info("Agrupando páginas consecutivas del mismo tipo")
         grouped_documents = self._group_consecutive_pages(pages, classifications)
+        logger.info(f"Creados {len(grouped_documents)} grupos de documentos")
         
         # 4. Extraer datos de cada grupo
+        logger.info("Extrayendo datos de cada grupo")
         extractions = []
-        for doc_type, grouped_pages in grouped_documents:
+        for i, (doc_type, grouped_pages) in enumerate(grouped_documents):
             if grouped_pages:
+                logger.info(f"Procesando grupo {i+1}: {doc_type} con {len(grouped_pages)} páginas")
                 # Unir páginas del grupo
                 merged_pdf = self.pdf_processor.merge_pages(grouped_pages)
                 
@@ -45,8 +57,10 @@ class DocumentProcessor:
                     extracted_data=extracted_data,
                     confidence=0.95
                 ))
+                logger.info(f"Grupo {i+1} procesado exitosamente")
         
         processing_time = time.time() - start_time
+        logger.info(f"Documento {document_id} procesado en {processing_time:.2f}s")
         
         return ProcessedDocument(
             document_id=document_id,
