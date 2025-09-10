@@ -13,3 +13,4 @@ azure-ai-formrecognizer
 requests
 slowapi
 python-dotenv
+psutil

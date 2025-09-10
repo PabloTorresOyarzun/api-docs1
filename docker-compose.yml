@@ -1,49 +1,152 @@
-# docker-compose.yml
+# docker-compose.prod.yml - Configuración para producción
 
 services:
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # Solo bind local
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
   api:
-    build: .
-    ports:
-      - "8000:8000"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - .:/app
-      - ./logs:/app/logs
+      - ./logs:/app/logs:rw
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - redis
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+      replicas: 2  # Para alta disponibilidad
 
   celery:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
     working_dir: /app
     environment:
       - REDIS_URL=redis://redis:6379/0
     volumes:
-      - .:/app
-      - ./logs:/app/logs
+      - ./logs:/app/logs:rw
+      - /etc/localtime:/etc/localtime:ro
     depends_on:
-      - redis
-      - api
-    command: celery -A app.tasks.celery_tasks:celery_app worker --loglevel=info
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks.celery_tasks:celery_app worker --loglevel=warning --concurrency=4
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.tasks.celery_tasks:celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./logs:/app/logs:rw
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A app.tasks.celery_tasks:celery_app beat --loglevel=warning
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
 
   nginx:
     image: nginx:alpine
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./logs:/var/log/nginx:rw
+      # - ./ssl:/etc/ssl:ro  # Para certificados SSL
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+
+  # Monitor opcional con Prometheus (comentado)
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:9090:9090"
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #     - prometheus_data:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   redis_data:
+    driver: local
+  # prometheus_data:
+  #   driver: local
