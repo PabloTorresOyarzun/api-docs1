@@ -13,8 +13,8 @@ class DocumentProcessor:
         self.pdf_processor = PDFProcessor()
         self.azure_service = AzureDocumentService()
     
-    def process_document(self, pdf_bytes: bytes, document_id: str) -> ProcessedDocument:
-        """Procesa un documento completo: separación, clasificación, agrupación y extracción"""
+    def clasificar_y_procesar(self, pdf_bytes: bytes, document_id: str) -> ProcessedDocument:
+        """Clasifica y procesa un documento completo (método original)"""
         start_time = time.time()
         
         # 1. Separar páginas
@@ -23,7 +23,32 @@ class DocumentProcessor:
         logger.info(f"Documento separado en {len(pages)} páginas")
         
         # 2. Clasificar cada página
-        logger.info("Iniciando clasificación de páginas individuales")
+        classifications = self.clasificar(pdf_bytes, document_id)
+        
+        # 3. Agrupar páginas consecutivas del mismo tipo
+        logger.info("Agrupando páginas consecutivas del mismo tipo")
+        grouped_documents = self._group_consecutive_pages(pages, classifications)
+        logger.info(f"Creados {len(grouped_documents)} grupos de documentos")
+        
+        # 4. Extraer datos de cada grupo
+        extractions = self._extract_from_groups(grouped_documents)
+        
+        processing_time = time.time() - start_time
+        logger.info(f"Documento {document_id} procesado en {processing_time:.2f}s")
+        
+        return ProcessedDocument(
+            document_id=document_id,
+            classification=classifications,
+            extraction=extractions,
+            processing_time=processing_time
+        )
+    
+    def clasificar(self, pdf_bytes: bytes, document_id: str) -> List[ClassificationResult]:
+        """Solo clasifica las páginas del documento"""
+        logger.info(f"Clasificando documento {document_id}")
+        pages = self.pdf_processor.separate_pages(pdf_bytes)
+        logger.info(f"Documento separado en {len(pages)} páginas")
+        
         classifications = []
         for i, page_bytes in enumerate(pages):
             logger.info(f"Clasificando página {i+1}/{len(pages)}")
@@ -35,14 +60,38 @@ class DocumentProcessor:
             ))
             logger.info(f"Página {i+1} clasificada como: {doc_type}")
         
-        # 3. Agrupar páginas consecutivas del mismo tipo
-        logger.info("Agrupando páginas consecutivas del mismo tipo")
-        grouped_documents = self._group_consecutive_pages(pages, classifications)
-        logger.info(f"Creados {len(grouped_documents)} grupos de documentos")
+        return classifications
+    
+    def procesar(self, pdf_bytes: bytes, document_type: DocumentType, document_id: str) -> ProcessedDocument:
+        """Procesa un documento ya clasificado extrayendo sus datos"""
+        start_time = time.time()
         
-        # 4. Extraer datos de cada grupo
+        logger.info(f"Procesando documento {document_id} como tipo: {document_type}")
+        
+        # Extraer datos directamente
+        extracted_data = self.azure_service.extract_data(pdf_bytes, document_type)
+        
+        extraction = ExtractionResult(
+            document_type=document_type,
+            extracted_data=extracted_data,
+            confidence=0.95
+        )
+        
+        processing_time = time.time() - start_time
+        logger.info(f"Documento {document_id} procesado en {processing_time:.2f}s")
+        
+        return ProcessedDocument(
+            document_id=document_id,
+            classification=[],  # No hay clasificación en este método
+            extraction=[extraction],
+            processing_time=processing_time
+        )
+    
+    def _extract_from_groups(self, grouped_documents: List[Tuple[DocumentType, List[bytes]]]) -> List[ExtractionResult]:
+        """Extrae datos de grupos de páginas"""
         logger.info("Extrayendo datos de cada grupo")
         extractions = []
+        
         for i, (doc_type, grouped_pages) in enumerate(grouped_documents):
             if grouped_pages:
                 logger.info(f"Procesando grupo {i+1}: {doc_type} con {len(grouped_pages)} páginas")
@@ -59,15 +108,7 @@ class DocumentProcessor:
                 ))
                 logger.info(f"Grupo {i+1} procesado exitosamente")
         
-        processing_time = time.time() - start_time
-        logger.info(f"Documento {document_id} procesado en {processing_time:.2f}s")
-        
-        return ProcessedDocument(
-            document_id=document_id,
-            classification=classifications,
-            extraction=extractions,
-            processing_time=processing_time
-        )
+        return extractions
     
     def _group_consecutive_pages(self, pages: List[bytes], classifications: List[ClassificationResult]) -> List[Tuple[DocumentType, List[bytes]]]:
         """Agrupa páginas consecutivas del mismo tipo"""
@@ -91,3 +132,6 @@ class DocumentProcessor:
         grouped.append((current_type, current_pages))
         
         return grouped
+    
+    # Método para mantener compatibilidad con código existente
+    process_document = clasificar_y_procesar
